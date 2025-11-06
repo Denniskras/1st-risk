@@ -1,0 +1,12 @@
+def collect_all_intel() -> List[Dict[str, Any]]:
+    """
+    Convenience-functie om alle connectors aan te roepen.
+    """
+    all_records: List[Dict[str, Any]] = []
+
+    all_records.extend(fetch_cisa_kev(days_back=14))
+    all_records.extend(fetch_nvd_recent(max_results=200))
+    all_records.extend(fetch_msrc_recent(days_back=14))
+    all_records.extend(fetch_exploitdb_recent(limit=100))
+
+    return all_records
