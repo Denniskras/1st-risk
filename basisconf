@@ -1,0 +1,75 @@
+# feed_connectors.py
+
+import os
+import requests
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional
+
+# -----------------------------------------------------------------------------
+# 1. Eenvoudige asset-mapping (CMDB-koppeling)
+# -----------------------------------------------------------------------------
+
+ASSET_KEYWORDS = {
+    # keyword in product/description -> CMDB asset id of logical group
+    "windows server": "ASSET_GRP_MS_WINDOWS_SERVER",
+    "exchange": "ASSET_MS_EXCHANGE_CLUSTER",
+    "sharepoint": "ASSET_MS_SHAREPOINT_FARM",
+    "citrix": "ASSET_CITRIX_NETSCALER",
+    "netScaler": "ASSET_CITRIX_NETSCALER",
+    "vpn": "ASSET_REMOTE_ACCESS_VPN",
+    "apache": "ASSET_APACHE_REVERSE_PROXY",
+    "nginx": "ASSET_NGINX_REVERSE_PROXY",
+    "fortigate": "ASSET_FORTIGATE_FIREWALLS",
+    "sql server": "ASSET_MS_SQL_CLUSTER",
+}
+
+
+def map_to_asset(text: str) -> Optional[str]:
+    """
+    Zeer eenvoudige CMDB-koppeling: keyword-match in product/description.
+    In productie vervang je dit door een lookup richting CMDB.
+    """
+    if not text:
+        return None
+    t = text.lower()
+    for keyword, asset_id in ASSET_KEYWORDS.items():
+        if keyword in t:
+            return asset_id
+    return None
+
+
+# -----------------------------------------------------------------------------
+# 2. Gemeenschappelijke normalisatie helper
+# -----------------------------------------------------------------------------
+
+def make_normalised_record(
+    source: str,
+    indicator_type: str,
+    cve_id: Optional[str],
+    title: str,
+    description: str,
+    raw_source: Dict[str, Any],
+    cvss_base_score: Optional[float] = None,
+    published: Optional[datetime] = None,
+    extra_tags: Optional[List[str]] = None,
+    exploitability_hint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Genormaliseerd record voor jouw datacollector / risicoregister.
+    """
+    txt = f"{title} {description}".strip()
+    asset_id = map_to_asset(txt)
+
+    return {
+        "source": source,
+        "indicator_type": indicator_type,
+        "cve_id": cve_id,
+        "title": title,
+        "description": description,
+        "raw": raw_source,
+        "cvss_base_score": cvss_base_score,
+        "published": published.isoformat() if published else None,
+        "asset_identifier": asset_id,
+        "exploitability_hint": exploitability_hint,
+        "tags": extra_tags or [],
+    }
