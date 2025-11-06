@@ -1,0 +1,64 @@
+# -----------------------------------------------------------------------------
+# CISA KEV connector
+# -----------------------------------------------------------------------------
+
+CISA_KEV_URL = os.getenv(
+    "CISA_KEV_URL",
+    # Directe CISA-feed (rate limiting); alternatief is GitHub mirror
+    "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+)
+
+
+def fetch_cisa_kev(days_back: int = 7) -> List[Dict[str, Any]]:
+    """
+    Haalt de CISA KEV JSON feed op en normaliseert naar interne records.
+    Filtert optioneel op 'days_back' voor recenter toegevoegde entries.
+    """
+    resp = requests.get(CISA_KEV_URL, timeout=60)
+    resp.raise_for_status()
+    data = resp.json()
+
+    # CISA KEV JSON bevat doorgaans een 'vulnerabilities'-array
+    vulns = data.get("vulnerabilities", data)
+
+    cutoff = datetime.utcnow() - timedelta(days=days_back)
+    records: List[Dict[str, Any]] = []
+
+    for item in vulns:
+        cve_id = item.get("cveID") or item.get("cve_id")
+        short_desc = item.get("shortDescription", "")
+        desc = item.get("description", short_desc)
+        vendor = item.get("vendorProject", "")
+        product = item.get("product", "")
+
+        published_str = item.get("dateAdded") or item.get("date_added")
+        try:
+            published = (
+                datetime.fromisoformat(published_str)
+                if published_str
+                else None
+            )
+        except ValueError:
+            published = None
+
+        # filter op recency
+        if published and published < cutoff:
+            continue
+
+        title = f"{cve_id} - {vendor} {product}".strip()
+
+        rec = make_normalised_record(
+            source="CISA_KEV",
+            indicator_type="known_exploited_cve",
+            cve_id=cve_id,
+            title=title,
+            description=desc,
+            raw_source=item,
+            cvss_base_score=None,  # komt later via NVD-enrichment
+            published=published,
+            extra_tags=["CISA_KEV", "exploited_in_the_wild"],
+            exploitability_hint="Known exploited (CISA KEV)",
+        )
+        records.append(rec)
+
+    return records
